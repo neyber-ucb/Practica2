@@ -1,3 +1,11 @@
+# Practica 2 – DevSecOps CI/CD Pipeline
+
+> **Documento de Justificación Técnica**: [JUSTIFICACION_TECNICA.md](JUSTIFICACION_TECNICA.md)
+> 
+> Contiene la justificación de cada herramienta utilizada en el pipeline, la fase DevSecOps en la que actúa, el tipo de riesgo que mitiga, y la evidencia de ejecución exitosa del pipeline.
+
+---
+
 ## Enfoque de la práctica
 Esta práctica debe ser implementada, no solo diseñada.
 El objetivo es aplicar DevSecOps de manera práctica, integrando:

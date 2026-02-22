@@ -256,3 +256,43 @@ install ──┬──► lint ────────────┐
 | `frontend/eslint.config.js` | Configuración de linting para frontend |
 | `backend/docker-compose.yml` | Orquestación de contenedores |
 | `*/Dockerfile` | Definición de imágenes Docker |
+
+---
+
+## Evidencia de Ejecución del Pipeline
+
+### Ejecución Exitosa #3
+
+- **Commit**: `6be6812` – `fix: add Jest globals to frontend ESLint config, ignore cypress.config.js`
+- **Branch**: `main`
+- **Trigger**: `push`
+- **Estado**: **Success**
+- **Duración total**: 4m 43s
+- **Enlace**: [Ver ejecución en GitHub Actions](https://github.com/neyber-ucb/Practica2/actions/runs/3)
+
+### Resultado por Etapa
+
+| # | Etapa | Estado | Duración aprox. |
+|---|---|---|---|
+| 1 | Instalación Reproducible | Passed | ~32s |
+| 2 | Calidad de Código (ESLint) | Passed | ~38s |
+| 3 | Testing Automático (Jest) | Passed | ~28s |
+| 4 | SAST (Semgrep) | Passed | ~16s |
+| 5 | SCA Dependencias (npm audit) | Passed | ~35s |
+| 6 | Build Docker (versionado) | Passed | ~58s |
+| 7 | Seguridad Contenedores (Trivy) | Passed | ~1m 50s |
+| 8 | Smoke Test (docker-compose) | Passed | ~1m 27s |
+
+### Captura de Pantalla del Pipeline
+
+![Pipeline DevSecOps - Ejecución Exitosa](docs/ActionsPractica2.png)
+
+*Captura de la pestaña Actions de GitHub mostrando las 8 etapas del pipeline ejecutadas exitosamente con el grafo de dependencias entre jobs.*
+
+### Observaciones
+
+- Las 8 etapas se ejecutaron correctamente sin errores.
+- El grafo de dependencias muestra la ejecución paralela de `lint`, `test` y `sca` después de `install`.
+- `SAST` se ejecutó después de `test`; `docker-build` esperó a que `test`, `sast` y `lint` pasaran.
+- `container-security` (Trivy) y `smoke-test` se ejecutaron en paralelo después de `docker-build`.
+- No se detectaron vulnerabilidades críticas en las imágenes Docker ni en el código fuente.
