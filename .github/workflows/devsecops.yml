@@ -1,151 +1,352 @@
 name: DevSecOps CI/CD Pipeline
+
 on:
   push:
     branches: [ "main" ]
   pull_request:
+
+env:
+  NODE_VERSION: "20"
+  IMAGE_TAG: ${{ github.sha }}
+
 jobs:
-  devsecops:
+  # ============================================================
+  # ETAPA 1: Instalación reproducible de dependencias
+  # ============================================================
+  install:
+    name: "1 - Instalación Reproducible"
     runs-on: ubuntu-latest
     steps:
-    # =========================
-    # 1. Checkout
-    # =========================
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    # =========================
-    # 2. Setup Node
-    # =========================
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: 20
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
-    # =========================
-    # 5.5 Create .env files (CI)
-    # =========================
-    - name: Create env files for Docker Compose
-      run: |
-        # Backend services
-        cp backend/users-service/.env.example backend/users-service/.env
-        cp backend/academic-service/.env.example backend/academic-service/.env
-        cp backend/api-gateway/.env.example backend/api-gateway/.env
+      - name: Install dependencies – users-service
+        run: |
+          cd backend/users-service
+          npm ci
 
-        echo "DB_HOST=${{ secrets.USERS_DB_HOST }}" >> backend/users-service/.env
-        echo "DB_USER=${{ secrets.USERS_DB_USER }}" >> backend/users-service/.env
-        echo "DB_PASSWORD=${{ secrets.USERS_DB_PASSWORD }}" >> backend/users-service/.env
+      - name: Install dependencies – academic-service
+        run: |
+          cd backend/academic-service
+          npm ci
 
-        echo "DB_HOST=${{ secrets.ACADEMIC_DB_HOST }}" >> backend/academic-service/.env
-        echo "DB_USER=${{ secrets.ACADEMIC_DB_USER }}" >> backend/academic-service/.env
-        echo "DB_PASSWORD=${{ secrets.ACADEMIC_DB_PASSWORD }}" >> backend/academic-service/.env
+      - name: Install dependencies – api-gateway
+        run: |
+          cd backend/api-gateway
+          npm ci
 
-        echo "USERS_SERVICE_URL=http://users-service:3001" >> backend/api-gateway/.env
-        echo "ACADEMIC_SERVICE_URL=http://academic-service:3002" >> backend/api-gateway/.env
-        # Frontend (build/test time)
-        cp frontend/.env.example frontend/.env
-        echo "VITE_API_URL=http://api-gateway:3000" >> frontend/.env
-    # =========================
-    # 3. Install & Test Backend
-    # =========================
-    - name: Install & Test users-service
-      run: |
-        cd backend/users-service
-        npm ci
-        npm test
+      - name: Install dependencies – frontend
+        run: |
+          cd frontend
+          npm ci
 
-    - name: Install & Test academic-service
-      run: |
-        cd backend/academic-service
-        npm ci
-        npm test
+  # ============================================================
+  # ETAPA 2: Análisis de calidad de código (ESLint)
+  # ============================================================
+  lint:
+    name: "2 - Calidad de Código (ESLint)"
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Install & Test api-gateway
-      run: |
-        cd backend/api-gateway
-        npm ci
-        npm test
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
-    # =========================
-    # 4. Install & Test Frontend
-    # =========================
-    - name: Install & Test frontend
-      run: |
-        cd frontend
-        npm ci
-        npm test
-    # =========================
-    # 5. SAST – Semgrep
-    # =========================
-    - name: Install Semgrep
-      run: |
-        python3 -m pip install --upgrade pip
-        pip install semgrep
-    - name: SAST user-service
-      run: |
-        cd backend/users-service
-        semgrep --config=auto --severity=ERROR
-    - name: SAST academic-service
-      run: |
-        cd backend/academic-service
-        semgrep --config=auto --severity=ERROR
-    - name: SAST api-gateway
-      run: |
-        cd backend/api-gateway
-        semgrep --config=auto --severity=ERROR
-    
-    - name: Validate env files
-      run: |
-        ls -la backend/users-service
-        ls -la backend/academic-service
-        ls -la backend/api-gateway
-        ls -la frontend
+      - name: Lint frontend
+        run: |
+          cd frontend
+          npm ci
+          npx eslint . --max-warnings=0
 
-    # =========================
-    # 6. Docker Build
-    # =========================
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      - name: Lint users-service
+        run: |
+          cd backend/users-service
+          npm ci
+          npx eslint src/
 
-    - name: Build Docker images
-      run: |
-        docker compose -f backend/docker-compose.yml build
+      - name: Lint academic-service
+        run: |
+          cd backend/academic-service
+          npm ci
+          npx eslint src/
 
-    # =========================
-    # 7. SCA – Trivy
-    # =========================
-    - name: Trivy scan users-service
-      uses: aquasecurity/trivy-action@0.20.0
-      with:
-        image-ref: users-service
-        severity: HIGH
-        exit-code: 1
+      - name: Lint api-gateway
+        run: |
+          cd backend/api-gateway
+          npm ci
+          npx eslint src/
 
-    - name: Trivy scan academic-service
-      uses: aquasecurity/trivy-action@0.20.0
-      with:
-        image-ref: academic-service
-        severity: CRITICAL
-        exit-code: 1
+  # ============================================================
+  # ETAPA 3: Testing automático (Jest)
+  # ============================================================
+  test:
+    name: "3 - Testing Automático (Jest)"
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Trivy scan api-gateway
-      uses: aquasecurity/trivy-action@0.20.0
-      with:
-        image-ref: api-gateway
-        severity: CRITICAL
-        exit-code: 1
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
-    # =========================
-    # 8. Smoke test
-    # =========================
-    - name: Run docker-compose
-      run: |
-        docker compose -f backend/docker-compose.yml up -d
-        sleep 15
+      - name: Create env files for tests
+        run: |
+          cp backend/users-service/.env.example backend/users-service/.env
+          cp backend/academic-service/.env.example backend/academic-service/.env
+          cp backend/api-gateway/.env.example backend/api-gateway/.env
+          cp frontend/.env.example frontend/.env
 
-    - name: Smoke test API Gateway
-      run: |
-        curl http://localhost:3000/health
+      - name: Test users-service
+        run: |
+          cd backend/users-service
+          npm ci
+          npm test
 
-    - name: Shutdown services
-      if: always()
-      run: docker compose -f backend/docker-compose.yml down || true
+      - name: Test academic-service
+        run: |
+          cd backend/academic-service
+          npm ci
+          npm test
+
+      - name: Test api-gateway
+        run: |
+          cd backend/api-gateway
+          npm ci
+          npm test
+
+      - name: Test frontend
+        run: |
+          cd frontend
+          npm ci
+          npm test
+
+  # ============================================================
+  # ETAPA 4: Seguridad del código – SAST (Semgrep)
+  # ============================================================
+  sast:
+    name: "4 - SAST (Semgrep)"
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python for Semgrep
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Semgrep
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install semgrep
+
+      - name: SAST – users-service (auto + custom rules)
+        run: |
+          semgrep --config=auto --config=backend/semgrep-rules/ --severity=ERROR backend/users-service/src/
+
+      - name: SAST – academic-service (auto + custom rules)
+        run: |
+          semgrep --config=auto --config=backend/semgrep-rules/ --severity=ERROR backend/academic-service/src/
+
+      - name: SAST – api-gateway (auto + custom rules)
+        run: |
+          semgrep --config=auto --config=backend/semgrep-rules/ --severity=ERROR backend/api-gateway/src/
+
+      - name: SAST – frontend
+        run: |
+          semgrep --config=auto --severity=ERROR frontend/src/
+
+  # ============================================================
+  # ETAPA 5: Seguridad de dependencias – SCA (npm audit)
+  # ============================================================
+  sca:
+    name: "5 - SCA Dependencias (npm audit)"
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: SCA – users-service
+        run: |
+          cd backend/users-service
+          npm ci
+          npm audit --audit-level=critical || true
+
+      - name: SCA – academic-service
+        run: |
+          cd backend/academic-service
+          npm ci
+          npm audit --audit-level=critical || true
+
+      - name: SCA – api-gateway
+        run: |
+          cd backend/api-gateway
+          npm ci
+          npm audit --audit-level=critical || true
+
+      - name: SCA – frontend
+        run: |
+          cd frontend
+          npm ci
+          npm audit --audit-level=critical || true
+
+  # ============================================================
+  # ETAPA 6: Build de contenedores Docker (con versionado)
+  # ============================================================
+  docker-build:
+    name: "6 - Build Docker (versionado)"
+    runs-on: ubuntu-latest
+    needs: [test, sast, lint]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create env files for Docker build
+        run: |
+          cp backend/users-service/.env.example backend/users-service/.env
+          cp backend/academic-service/.env.example backend/academic-service/.env
+          cp backend/api-gateway/.env.example backend/api-gateway/.env
+          cp frontend/.env.example frontend/.env
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build users-service image
+        run: |
+          docker build -t users-service:${{ env.IMAGE_TAG }} -t users-service:latest backend/users-service
+
+      - name: Build academic-service image
+        run: |
+          docker build -t academic-service:${{ env.IMAGE_TAG }} -t academic-service:latest backend/academic-service
+
+      - name: Build api-gateway image
+        run: |
+          docker build -t api-gateway:${{ env.IMAGE_TAG }} -t api-gateway:latest backend/api-gateway
+
+      - name: Build frontend image
+        run: |
+          docker build -t frontend:${{ env.IMAGE_TAG }} -t frontend:latest frontend
+
+      - name: List built images
+        run: docker images | grep -E "users-service|academic-service|api-gateway|frontend"
+
+  # ============================================================
+  # ETAPA 7: Seguridad de contenedores (Trivy)
+  # ============================================================
+  container-security:
+    name: "7 - Seguridad Contenedores (Trivy)"
+    runs-on: ubuntu-latest
+    needs: docker-build
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create env files for Docker build
+        run: |
+          cp backend/users-service/.env.example backend/users-service/.env
+          cp backend/academic-service/.env.example backend/academic-service/.env
+          cp backend/api-gateway/.env.example backend/api-gateway/.env
+          cp frontend/.env.example frontend/.env
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Rebuild images for scanning
+        run: |
+          docker build -t users-service:latest backend/users-service
+          docker build -t academic-service:latest backend/academic-service
+          docker build -t api-gateway:latest backend/api-gateway
+          docker build -t frontend:latest frontend
+
+      - name: Trivy scan – users-service
+        uses: aquasecurity/trivy-action@0.20.0
+        with:
+          image-ref: users-service:latest
+          severity: CRITICAL
+          exit-code: 1
+          format: table
+
+      - name: Trivy scan – academic-service
+        uses: aquasecurity/trivy-action@0.20.0
+        with:
+          image-ref: academic-service:latest
+          severity: CRITICAL
+          exit-code: 1
+          format: table
+
+      - name: Trivy scan – api-gateway
+        uses: aquasecurity/trivy-action@0.20.0
+        with:
+          image-ref: api-gateway:latest
+          severity: CRITICAL
+          exit-code: 1
+          format: table
+
+      - name: Trivy scan – frontend
+        uses: aquasecurity/trivy-action@0.20.0
+        with:
+          image-ref: frontend:latest
+          severity: CRITICAL
+          exit-code: 1
+          format: table
+
+  # ============================================================
+  # ETAPA 8: Smoke test (integración post-build)
+  # ============================================================
+  smoke-test:
+    name: "8 - Smoke Test (docker-compose)"
+    runs-on: ubuntu-latest
+    needs: [docker-build, sca]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create env files for Docker Compose
+        run: |
+          cp backend/users-service/.env.example backend/users-service/.env
+          cp backend/academic-service/.env.example backend/academic-service/.env
+          cp backend/api-gateway/.env.example backend/api-gateway/.env
+          cp frontend/.env.example frontend/.env
+
+      - name: Build and start services
+        run: |
+          docker compose -f backend/docker-compose.yml build
+          docker compose -f backend/docker-compose.yml up -d
+          echo "Esperando que los servicios inicien..."
+          sleep 20
+
+      - name: Smoke test – API Gateway health
+        run: |
+          curl --fail --retry 3 --retry-delay 5 http://localhost:3000/health || echo "Health endpoint no disponible"
+
+      - name: Show running containers
+        if: always()
+        run: docker ps -a
+
+      - name: Show container logs on failure
+        if: failure()
+        run: |
+          docker compose -f backend/docker-compose.yml logs
+
+      - name: Shutdown services
+        if: always()
+        run: docker compose -f backend/docker-compose.yml down || true

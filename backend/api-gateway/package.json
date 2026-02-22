@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "jest"
+    "test": "jest",
+    "lint": "eslint src/"
   },
   "keywords": [],
   "author": "",
@@ -21,5 +22,8 @@
     "http-proxy-middleware": "^3.0.5",
     "jest": "^30.2.0",
     "tar": "^7.5.7"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0"
   }
 }
