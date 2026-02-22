@@ -71,6 +71,7 @@ Push / Pull Request (main)
 | **Fase DevSecOps** | Build / Integración Continua |
 | **Riesgo que mitiga** | Inconsistencias entre entornos (desarrollo vs CI vs producción) |
 | **Justificación** | `npm ci` instala dependencias exactamente como están definidas en `package-lock.json`, a diferencia de `npm install` que puede resolver versiones diferentes. Si el `package-lock.json` no coincide con `package.json`, el comando falla inmediatamente, garantizando reproducibilidad. Esto es fundamental en DevSecOps porque una dependencia con versión diferente podría introducir vulnerabilidades no detectadas. |
+| **Consecuencia de omitirla** | Sin `npm ci`, el pipeline podría instalar versiones distintas a las probadas localmente, generando falsos positivos en tests o, peor aún, desplegando dependencias con vulnerabilidades no auditadas. Se pierde la trazabilidad entre lo que se prueba y lo que se despliega. |
 
 ---
 
@@ -82,6 +83,7 @@ Push / Pull Request (main)
 | **Fase DevSecOps** | Code Quality / Shift-Left |
 | **Riesgo que mitiga** | Errores de programación, malas prácticas, código inseguro |
 | **Justificación** | ESLint detecta automáticamente errores comunes como variables no definidas, uso de `eval()` (vector de inyección de código), y malas prácticas que pueden derivar en vulnerabilidades. El frontend utiliza la configuración flat config de ESLint 9 con plugins de React. Los servicios backend usan `.eslintrc.json` con reglas enfocadas en seguridad (`no-eval`, `no-implied-eval`). El pipeline falla si se detectan errores, impidiendo que código de baja calidad avance. |
+| **Consecuencia de omitirla** | Sin análisis de calidad, errores como uso de `eval()`, variables no declaradas o código muerto llegarían a producción. Estos patrones son vectores de ataque comunes (inyección de código, XSS) que no se detectan con tests funcionales. |
 
 **Reglas de seguridad aplicadas:**
 - `no-eval`: Previene ejecución de código arbitrario
@@ -99,6 +101,7 @@ Push / Pull Request (main)
 | **Fase DevSecOps** | Continuous Testing |
 | **Riesgo que mitiga** | Regresiones funcionales, comportamiento inesperado |
 | **Justificación** | Las pruebas automatizadas verifican que cada microservicio funciona correctamente antes de avanzar en el pipeline. Si un test falla, el pipeline se detiene completamente, impidiendo que código defectuoso llegue a las etapas de build y despliegue. Esto es esencial en DevSecOps porque un cambio funcional incorrecto puede abrir vectores de ataque (ej: validación de JWT rota, bypass de autenticación). |
+| **Consecuencia de omitirla** | Sin tests automáticos, regresiones funcionales pasarían desapercibidas. Un cambio que rompa la validación de JWT o el control de acceso llegaría a producción, permitiendo acceso no autorizado a endpoints protegidos. |
 
 **Cobertura de tests:**
 - `users-service`: Health check + lógica de autenticación
@@ -116,6 +119,7 @@ Push / Pull Request (main)
 | **Fase DevSecOps** | SAST (Static Application Security Testing) / Shift-Left Security |
 | **Riesgo que mitiga** | Vulnerabilidades en código fuente: inyección, secretos hardcodeados, eval inseguro |
 | **Justificación** | Semgrep analiza el código fuente sin ejecutarlo, detectando patrones de vulnerabilidad conocidos. Se utiliza tanto el conjunto de reglas `auto` (mantenido por la comunidad con miles de reglas para JavaScript/Node.js) como reglas personalizadas definidas en `backend/semgrep-rules/`. Esto permite detectar vulnerabilidades **antes** de que el código se compile o despliegue. |
+| **Consecuencia de omitirla** | Sin SAST, vulnerabilidades como secretos hardcodeados, inyección SQL, uso de `eval()` o inputs sin validar permanecerían en el código fuente. Estas son las vulnerabilidades más explotadas según OWASP Top 10 y solo se detectan mediante análisis estático. |
 
 **Reglas personalizadas incluidas:**
 
@@ -140,7 +144,8 @@ Push / Pull Request (main)
 | **Herramienta** | `npm audit` |
 | **Fase DevSecOps** | SCA (Software Composition Analysis) |
 | **Riesgo que mitiga** | Vulnerabilidades conocidas (CVEs) en dependencias de terceros |
-| **Justificación** | Las aplicaciones modernas dependen de cientos de paquetes npm. `npm audit` consulta la base de datos de vulnerabilidades de npm para detectar CVEs conocidos en las dependencias instaladas. Se configura con `--audit-level=critical` para que el pipeline reporte vulnerabilidades críticas. Esto es fundamental porque una sola dependencia vulnerable puede comprometer todo el sistema (ej: `log4shell`, `event-stream`). |
+| **Justificación** | Las aplicaciones modernas dependen de cientos de paquetes npm. `npm audit` consulta la base de datos de vulnerabilidades de npm para detectar CVEs conocidos en las dependencias instaladas. Se configura con `--audit-level=critical` para que el pipeline **falle ante vulnerabilidades críticas**, actuando como gate de seguridad efectivo. Esto es fundamental porque una sola dependencia vulnerable puede comprometer todo el sistema (ej: `log4shell`, `event-stream`). |
+| **Consecuencia de omitirla** | Sin SCA, dependencias con CVEs críticos conocidos llegarían a producción. Ataques como `event-stream` (2018) o `ua-parser-js` (2021) demuestran que paquetes npm populares pueden ser comprometidos. Sin auditoría automática, el equipo no tendría visibilidad sobre estos riesgos. |
 
 **Dependencias críticas analizadas:**
 - `jsonwebtoken` (autenticación JWT)
@@ -159,6 +164,7 @@ Push / Pull Request (main)
 | **Fase DevSecOps** | Build / Artifact Generation |
 | **Riesgo que mitiga** | Artefactos no rastreables, builds no reproducibles |
 | **Justificación** | Cada imagen Docker se construye con doble etiquetado: el SHA del commit (`$GITHUB_SHA`) y `latest`. El versionado por SHA permite rastrear exactamente qué código contiene cada imagen, facilitando auditorías de seguridad y rollbacks. Docker Buildx se usa para builds optimizados con caché. Solo se construyen las imágenes si las etapas previas (tests, SAST, lint) pasan exitosamente. |
+| **Consecuencia de omitirla** | Sin versionado de imágenes, sería imposible rastrear qué código contiene cada contenedor desplegado. Ante un incidente de seguridad, no se podría hacer rollback a una versión específica ni auditar qué cambios introdujeron la vulnerabilidad. |
 
 **Imágenes construidas:**
 
@@ -179,6 +185,7 @@ Push / Pull Request (main)
 | **Fase DevSecOps** | Container Security Scanning |
 | **Riesgo que mitiga** | Vulnerabilidades en imagen base del SO, librerías del sistema, dependencias internas |
 | **Justificación** | Trivy escanea las imágenes Docker construidas buscando vulnerabilidades en: (1) el sistema operativo base (Alpine Linux), (2) paquetes del sistema, y (3) dependencias de la aplicación empaquetadas en la imagen. Se configura con `severity: CRITICAL` y `exit-code: 1` para que el pipeline falle ante vulnerabilidades críticas. Esto complementa el SCA de npm audit porque analiza el entorno completo de ejecución, no solo las dependencias de Node.js. |
+| **Consecuencia de omitirla** | Sin escaneo de contenedores, vulnerabilidades en la imagen base (Alpine, nginx) o en paquetes del sistema operativo pasarían a producción. Un atacante podría explotar una vulnerabilidad del SO para escapar del contenedor o escalar privilegios, incluso si el código de la aplicación es seguro. |
 
 **¿Por qué Trivy y no Grype?**
 - Trivy tiene integración oficial con GitHub Actions (`aquasecurity/trivy-action`)
@@ -196,6 +203,7 @@ Push / Pull Request (main)
 | **Fase DevSecOps** | Integration Testing / Verification |
 | **Riesgo que mitiga** | Servicios que compilan pero no funcionan en conjunto |
 | **Justificación** | Levanta todos los servicios con Docker Compose y verifica que el API Gateway responde en `/health`. Esto valida que la comunicación entre microservicios funciona correctamente y que los contenedores construidos son operativos. En caso de fallo, se muestran los logs de todos los contenedores para facilitar el diagnóstico. |
+| **Consecuencia de omitirla** | Sin smoke test, contenedores que compilan correctamente pero fallan en tiempo de ejecución (errores de configuración, puertos incorrectos, variables de entorno faltantes) llegarían a producción. La integración entre microservicios no se validaría hasta el despliegue real. |
 
 ---
 

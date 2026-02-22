@@ -189,25 +189,25 @@ jobs:
         run: |
           cd backend/users-service
           npm ci
-          npm audit --audit-level=critical || true
+          npm audit --audit-level=critical
 
       - name: SCA – academic-service
         run: |
           cd backend/academic-service
           npm ci
-          npm audit --audit-level=critical || true
+          npm audit --audit-level=critical
 
       - name: SCA – api-gateway
         run: |
           cd backend/api-gateway
           npm ci
-          npm audit --audit-level=critical || true
+          npm audit --audit-level=critical
 
       - name: SCA – frontend
         run: |
           cd frontend
           npm ci
-          npm audit --audit-level=critical || true
+          npm audit --audit-level=critical
 
   # ============================================================
   # ETAPA 6: Build de contenedores Docker (con versionado)
