@@ -22,41 +22,35 @@ Todos los servicios están containerizados con Docker y orquestados mediante Doc
 
 ## Diagrama del Pipeline CI/CD
 
-```
-Push / Pull Request (main)
-        │
-        ▼
-┌─────────────────────────┐
-│ 1. Instalación          │  ← npm ci (reproducible)
-│    Reproducible         │
-└─────────┬───────────────┘
-          │
-    ┌─────┼──────────┬──────────────┐
-    ▼     ▼          ▼              ▼
-┌───────┐ ┌────────┐ ┌───────────┐ ┌─────┐
-│2.Lint │ │3.Tests │ │ 5. SCA    │ │     │
-│ESLint │ │ Jest   │ │ npm audit │ │     │
-└───┬───┘ └───┬────┘ └─────┬─────┘ │     │
-    │         │             │       │     │
-    │         ▼             │       │     │
-    │    ┌─────────┐        │       │     │
-    │    │ 4. SAST │        │       │     │
-    │    │ Semgrep │        │       │     │
-    │    └────┬────┘        │       │     │
-    │         │             │       │     │
-    └────┬────┘             │       │     │
-         ▼                  │       │     │
-┌─────────────────┐         │       │     │
-│ 6. Docker Build │ ◄───────┘       │     │
-│   (versionado)  │                 │     │
-└────────┬────────┘                 │     │
-    ┌────┴──────────┐               │     │
-    ▼               ▼               │     │
-┌──────────┐  ┌───────────┐        │     │
-│7.Trivy   │  │8.Smoke    │ ◄──────┘     │
-│Container │  │  Test     │               │
-│ Scan     │  │docker-comp│               │
-└──────────┘  └───────────┘               │
+> Archivo fuente del diagrama: [`docs/pipeline-diagram.mmd`](docs/pipeline-diagram.mmd)
+
+```mermaid
+graph TD
+    A[Push / Pull Request - main] --> B["1 - Instalación Reproducible<br/><b>npm ci</b>"]
+
+    B --> C["2 - Calidad de Código<br/><b>ESLint</b>"]
+    B --> D["3 - Testing Automático<br/><b>Jest</b>"]
+    B --> E["5 - SCA Dependencias<br/><b>npm audit</b>"]
+
+    D --> F["4 - SAST<br/><b>Semgrep</b>"]
+
+    C --> G["6 - Build Docker<br/><b>Docker + Buildx</b><br/>Versionado por SHA"]
+    D --> G
+    F --> G
+
+    G --> H["7 - Seguridad Contenedores<br/><b>Trivy</b>"]
+    G --> I["8 - Smoke Test<br/><b>docker-compose + curl</b>"]
+    E --> I
+
+    style A fill:#4a90d9,stroke:#2c5f8a,color:#fff
+    style B fill:#50c878,stroke:#2e8b57,color:#fff
+    style C fill:#f5a623,stroke:#d4891c,color:#fff
+    style D fill:#f5a623,stroke:#d4891c,color:#fff
+    style E fill:#e74c3c,stroke:#c0392b,color:#fff
+    style F fill:#e74c3c,stroke:#c0392b,color:#fff
+    style G fill:#9b59b6,stroke:#7d3c98,color:#fff
+    style H fill:#e74c3c,stroke:#c0392b,color:#fff
+    style I fill:#1abc9c,stroke:#16a085,color:#fff
 ```
 
 ---
