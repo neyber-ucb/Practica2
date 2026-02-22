@@ -285,7 +285,7 @@ install ──┬──► lint ────────────┐
 
 ### Captura de Pantalla del Pipeline
 
-![Pipeline DevSecOps - Ejecución Exitosa](docs/ActionsPractica2.png)
+![Pipeline DevSecOps - Ejecución Exitosa](docs/ActionsPractica2.jpg)
 
 *Captura de la pestaña Actions de GitHub mostrando las 8 etapas del pipeline ejecutadas exitosamente con el grafo de dependencias entre jobs.*
 
